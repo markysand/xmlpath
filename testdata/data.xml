@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<test-education-register>
+	<persons>
+		<person>
+			<name>Kit</name>
+			<school-ref>1</school-ref>
+		</person>
+		<person>
+			<name>Cool</name>
+			<school-ref>2</school-ref>
+		</person>
+		<person>
+			<name>Calm</name>
+			<school-ref>1</school-ref>
+		</person>
+	</persons>
+	<educations>
+		<education-sites>
+			<school id="1">Hogwarts</school>
+			<school id="2">School of Life</school>
+		</education-sites>
+	</educations>
+</test-education-register>

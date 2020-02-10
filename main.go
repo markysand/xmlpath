@@ -1,3 +1,6 @@
+// Package xmlpath simplifies stream parsing of xml
+// this is useful to save memory and execution time for
+// very large files.
 package xmlpath
 
 import (
@@ -8,16 +11,75 @@ import (
 	"github.com/pkg/errors"
 )
 
-// PipeXML is an utility that will get tokens of a specific type, read one by one
-// by the callback sent into PipeXml
-func PipeXML(xmlTokenDecoder *xml.Decoder, path []string, callback func(start *xml.StartElement)) (int, error) {
-	pathLength := len(path)
-	if pathLength == 0 {
-		return 0, errors.New("Do not call PipeXML with zero path - mistake?")
-	}
-	var pathDepth, parsedDocuments int
+// Decoder is the "double" callback type given to Pipe from
+// each PathConfig. The decodeInto function is used to extract
+// the xml value into a *Type variable of the users choice,
+// as with standard xml decoding
+type Decoder func(decodeInto func(interface{}))
 
-	// Selective path tree parsing
+type matchType int
+
+const (
+	without matchType = iota
+	within
+	exact
+)
+
+type pathElements []string
+
+func (pe pathElements) match(ss []string) matchType {
+	reference, dynamic := len(pe), len(ss)
+	for i := 0; i < reference && i < dynamic; i++ {
+		if pe[i] != ss[i] {
+			return without
+		}
+	}
+	switch {
+	case reference == dynamic:
+		return exact
+	case reference > dynamic:
+		return within
+	default:
+		return without
+	}
+}
+
+func (pe *pathElements) add(s string) {
+	*pe = append(*pe, s)
+}
+
+func (pe *pathElements) pop() {
+	*pe = (*pe)[:len(*pe)-1]
+}
+
+// PathConfig contains callback and elements of the path
+type PathConfig struct {
+	Decoder
+	pathElements
+}
+
+// NewPathConfig sets up a path with a callback
+func NewPathConfig(callback Decoder, pathElements ...string) PathConfig {
+	return PathConfig{
+		callback, pathElements,
+	}
+}
+
+// Pipe trigger the callbacks as paths are matched. Reading along
+// the source.
+func Pipe(source io.Reader, paths ...PathConfig) (int, error) {
+	decoder := xml.NewDecoder(source)
+	xmlTokenDecoder := xml.NewTokenDecoder(decoder)
+
+	// test paths for interference
+	if err := testInterference(paths); err != nil {
+		return 0, err
+	}
+	var (
+		parsedDocuments int
+		currentPath     pathElements
+	)
+LOOP:
 	for {
 		token, err := xmlTokenDecoder.Token()
 		if err == io.EOF {
@@ -28,30 +90,43 @@ func PipeXML(xmlTokenDecoder *xml.Decoder, path []string, callback func(start *x
 		}
 		switch tokenType := token.(type) {
 		case xml.StartElement:
-			if tokenType.Name.Local == path[pathDepth] {
-				if pathDepth == pathLength-1 { // time to harvest!
-					callback(&tokenType)
+			currentPath.add(tokenType.Name.Local)
+			var withinAnyPath bool
+			for _, path := range paths {
+				switch path.match(currentPath) {
+				case exact:
+					path.Decoder(func(decodeInto interface{}) {
+						xmlTokenDecoder.DecodeElement(decodeInto, &tokenType)
+					})
 					parsedDocuments++
-					// xmlTokenDecoder.Skip()
-				} else {
-					pathDepth++ // not skip
+					currentPath.pop()
+					continue LOOP
+				case within:
+					withinAnyPath = true
 				}
-			} else {
+			}
+			if !withinAnyPath {
 				xmlTokenDecoder.Skip()
+				currentPath.pop()
 			}
 		case xml.EndElement:
-			if pathDepth == 0 {
+			if len(currentPath) == 0 {
 				return 0, errors.New(fmt.Sprint(
-					"Gone through root level at",
+					"Broken through root level at, XML error",
 					tokenType.Name.Local))
 			}
-			pathDepth--
-			if path[pathDepth] != tokenType.Name.Local {
-				return 0, errors.New(
-					fmt.Sprintf("Got end token %v but it does not match expected %v",
-						tokenType.Name.Local,
-						path[pathDepth]))
+			currentPath.pop()
+		}
+	}
+}
+
+func testInterference(paths []PathConfig) error {
+	for i := 0; i < len(paths)-1; i++ {
+		for j := i + 1; j < len(paths); j++ {
+			if paths[i].match(paths[j].pathElements) == within || paths[j].match(paths[i].pathElements) == within {
+				return fmt.Errorf("Path %v and path %v - illegal interference", paths[i].pathElements, paths[j].pathElements)
 			}
 		}
 	}
+	return nil
 }
