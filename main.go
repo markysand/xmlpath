@@ -1,6 +1,4 @@
-// Package xmlpath simplifies stream parsing of xml
-// this is useful to save memory and execution time for
-// very large files.
+// Package xmlpath simplifies stream parsing large xml-files.
 package xmlpath
 
 import (
@@ -15,7 +13,7 @@ import (
 // each PathConfig. The decodeInto function is used to extract
 // the xml value into a *Type variable of the users choice,
 // as with standard xml decoding
-type Decoder func(decodeInto func(interface{}))
+type Decoder func(decodeInto func(target interface{}) error)
 
 type matchType int
 
@@ -65,8 +63,7 @@ func NewPathConfig(callback Decoder, pathElements ...string) PathConfig {
 	}
 }
 
-// Pipe trigger the callbacks as paths are matched. Reading along
-// the source.
+// Pipe triggers the decoding callback for each path
 func Pipe(source io.Reader, paths ...PathConfig) (int, error) {
 	decoder := xml.NewDecoder(source)
 	xmlTokenDecoder := xml.NewTokenDecoder(decoder)
@@ -95,8 +92,9 @@ LOOP:
 			for _, path := range paths {
 				switch path.match(currentPath) {
 				case exact:
-					path.Decoder(func(decodeInto interface{}) {
-						xmlTokenDecoder.DecodeElement(decodeInto, &tokenType)
+					path.Decoder(func(target interface{}) error {
+						err := xmlTokenDecoder.DecodeElement(target, &tokenType)
+						return err
 					})
 					parsedDocuments++
 					currentPath.pop()

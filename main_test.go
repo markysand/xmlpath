@@ -34,7 +34,7 @@ func Test_Pipe(t *testing.T) {
 
 			var persons []Person
 			pathConfig1 := xmlpath.NewPathConfig(
-				func(decodeInto func(interface{})) {
+				func(decodeInto func(target interface{}) error) {
 					person := new(Person)
 					decodeInto(person)
 					persons = append(persons, *person)
@@ -43,7 +43,7 @@ func Test_Pipe(t *testing.T) {
 			)
 
 			var schools []School
-			pathConfig2 := xmlpath.NewPathConfig(func(decodeInto func(interface{})) {
+			pathConfig2 := xmlpath.NewPathConfig(func(decodeInto func(interface{}) error) {
 				school := new(School)
 				decodeInto(school)
 				schools = append(schools, *school)
@@ -83,7 +83,7 @@ func Test_Pipe(t *testing.T) {
 
 		persons := new([]Person)
 
-		p1 := xmlpath.NewPathConfig(func(decodeInto func(interface{})) { decodeInto(persons) },
+		p1 := xmlpath.NewPathConfig(func(decodeInto func(interface{}) error) { decodeInto(persons) },
 			"test-education-register", "persons", "person")
 
 		_, err = xmlpath.Pipe(file, p1)
@@ -113,10 +113,12 @@ func ExamplePipe() {
 		Text    string   `xml:",chardata"`
 	}
 
-	pathConfig1 := xmlpath.NewPathConfig(func(decodeInto func(interface{})) {
-
+	pathConfig1 := xmlpath.NewPathConfig(func(decodeInto func(interface{}) error) {
 		apple := new(Apple)
-		decodeInto(apple)
+		err := decodeInto(apple)
+		if err != nil {
+			fmt.Print(fmt.Errorf("Could not decode: %v", err))
+		}
 		fmt.Println(apple.Text)
 	},
 		"document", "basket", "apple")

@@ -3,7 +3,7 @@ package xmlpath
 import "testing"
 
 func Test_TestInterference(t *testing.T) {
-	var callback Decoder = func(decodeInto func(i interface{})) {}
+	var callback Decoder = func(func(target interface{}) error) {}
 	path1 := NewPathConfig(callback, "alfa", "beta", "gamma", "delta")
 	path2 := NewPathConfig(callback, "alfa", "beta", "theta")
 	path3 := NewPathConfig(callback, "alfa", "beta", "theta", "sigma")
